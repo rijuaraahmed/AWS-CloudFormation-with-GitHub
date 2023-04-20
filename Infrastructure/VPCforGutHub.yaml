@@ -1,0 +1,595 @@
+
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This template creates a VPC with Public and Private Subnets
+# This CloudFormation template deploys a basic VPC / Network.  Specifically:
+# It deploys a VPC with 9 subnets (4 public, 4 private) across 2 Availability Zones
+# A NAT Gateway is used to provide egress for private subnets and is placed in a public subnet
+# Security Group rules and Route Tables are associated to show the traffic flow.
+
+Parameters:
+  VpcCIDR:
+    Default: 10.100.0.0/16
+    Description: IP range for this VPC
+    Type: String
+
+  BastionSNACIDR:
+    Default: 10.100.1.0/24
+    Description: IP range for this Bastion Subnet in AZ A
+    Type: String 
+
+  BastionSNBCIDR:
+    Default: 10.100.2.0/24
+    Description: IP range for this Bastion Subnet in AZ B
+    Type: String  
+
+  PublicSNACIDR:
+    Default: 10.100.3.0/24
+    Description: IP range for this Public Subnet in AZ A
+    Type: String
+
+  PublicSNBCIDR:
+    Default: 10.100.4.0/24
+    Description: IP range for this Public Subnet in AZ B
+    Type: String
+
+  PrivateSNACIDR:
+    Default: 10.100.5.0/24
+    Description: IP range for this Private Subnet in AZ A
+    Type: String  
+
+  PrivateSNBCIDR:
+    Default: 10.100.6.0/24
+    Description: IP range for this Private Subnet in AZ B
+    Type: String 
+
+  DataSNACIDR:
+    Default: 10.100.7.0/24
+    Description: IP range for this Data Subnet in AZ A
+    Type: String  
+
+  DataSNBCIDR:
+    Default: 10.100.8.0/24
+    Description: IP range for this Data Subnet in AZ B
+    Type: String  
+
+  SSHLocation:
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 217.180.225.234/32
+    Description: The IP address range that can be used to access the Bastion server using SSH.
+    MaxLength: '18'
+    MinLength: '9'
+    Type: String  
+
+  MySQLLocation:
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 217.180.225.234/32
+    Description: The IP address range that can be used to access the Bastion server using MySql.
+    MaxLength: '18'
+    MinLength: '9'
+    Type: String     
+
+Resources:
+
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: testVPC
+
+
+  # Internet access:      
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+      - Key: Name
+        Value: TestIGW 
+
+
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref myInternetGateway
+
+
+  # 4 public Subnets and 4 private Subnets:
+  
+  # Bastion instance in public subnet AZ A
+  BastionSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref BastionSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]   
+      Tags:
+      - Key: Name
+        Value: BastionSNA
+
+  # Bastion instance in public subnet AZ B
+  BastionSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref BastionSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '' ] 
+      Tags:
+      - Key: Name
+        Value: BastionSNB 
+  
+  # Public subnet with nginx instance in AZ A
+  PublicSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '']  
+      Tags:
+      - Key: Name
+        Value: PublicSNA
+
+  # Public subnet with nginx instance in AZ B  
+  PublicSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs ''] 
+      Tags:
+      - Key: Name
+        Value: PublicSNB
+
+  #Private subnet with nodeJS instance in AZ A
+  PrivateSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: PrivateSNA
+
+  #Private subnet with nodeJS instance in AZ B   
+  PrivateSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: PrivateSNB
+  
+  #Private subnet with RDS instance in AZ A
+  DataSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DataSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: DataSNA
+
+  #Private subnet with RDS read replica in AZ B
+  DataSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DataSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '' ] 
+      Tags:
+      - Key: Name
+        Value: DataSNB    
+
+
+  # A NAT Gateway for AZ A: 
+  NATGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NATGateway1EIP.AllocationId
+      PrivateIpAddress: 10.100.3.250
+      SubnetId: !Ref PublicSNA
+      Tags: 
+      - Key: Name
+        Value: NatGateway in PublicSNA
+
+  NATGateway1EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+      - Key: Name
+        Value: EIP1        
+
+  # A NAT Gateway for AZ B:
+
+  NATGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NATGateway2EIP.AllocationId
+      PrivateIpAddress: 10.100.4.250
+      SubnetId: !Ref PublicSNB
+      Tags: 
+      - Key: Name
+        Value: NatGateway in PublicSNB
+
+  NATGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+      - Key: Name
+        Value: EIP2 
+
+
+  # Private Route Table 1
+  PrivateRT1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRT in AZ A
+
+
+  PrivateRoute1:            # Private route table can access web via NAT (created below)
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRT1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway1 # Route traffic through the NAT Gateway in AZ A 
+ 
+
+  PrivateSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSNA
+      RouteTableId: !Ref PrivateRT1
+
+  DataSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DataSNA
+      RouteTableId: !Ref PrivateRT1       
+
+
+  # Private Route Table 2
+  PrivateRT2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRT in AZ B
+
+
+  PrivateRoute2:            # Private route table can access web via NAT (created below)
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRT2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway2 # Route traffic through the NAT Gateway in AZ B 
+
+
+  PrivateSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSNB
+      RouteTableId: !Ref PrivateRT2            
+
+  DataSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DataSNB
+      RouteTableId: !Ref PrivateRT2      
+
+
+
+        
+  # Some route tables for our subnets:
+ 
+  #Public Route Table
+  PublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PublicRT
+
+
+  PublicRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref myInternetGateway
+
+
+  #Bastion Route Table
+  BastionRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: BastionRT
+
+
+  BastionRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref BastionRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref myInternetGateway      
+       
+ 
+
+  # Attach the public subnets to public route tables, 
+  # and attach the private subnets to private route tables:    
+  PublicSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSNA
+      RouteTableId: !Ref PublicRT
+
+
+  PublicSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSNB
+      RouteTableId: !Ref PublicRT
+
+
+  BastionSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref BastionSNA
+      RouteTableId: !Ref BastionRT  
+
+
+  BastionSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref BastionSNB
+      RouteTableId: !Ref BastionRT   
+
+      
+
+  # Security Group Rules
+
+  ALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open http(s) (80/443)"
+      GroupName: ALBSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:          
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80 
+          CidrIp: 0.0.0.0/0
+          Description: allow inbound http access from anywhere          
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: allow inbound https access from anywhere          
+      Tags:
+        - Key: Name
+          Value: ALBSG
+
+
+  ALBinternalSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Access to the internal Load balancer"
+      GroupName: ALBinternalSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:          
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref publicSG
+          Description: allow inbound http access from instances with publicSG                
+      Tags:
+        - Key: Name
+          Value: ALBinternalSG    
+            
+
+
+  bastionSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open ssh (22) and mysql (3306)"
+      GroupName: bastionSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+          Description: allow inbound ssh access from myIP 
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306 
+          CidrIp: !Ref MySQLLocation
+          Description: allow inbound mysql access from myIP          
+      Tags:
+        - Key: Name
+          Value: bastionSG   
+
+  publicSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open ssh (22) and http(s) (80/443)"
+      GroupName: publicSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22 
+          SourceSecurityGroupId: !Ref bastionSG
+          Description: allow inbound ssh access from bastionSG          
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80 
+          SourceSecurityGroupId: !Ref ALBSG
+          Description: allow inbound http access from Aoolication Load Balancer          
+      # - IpProtocol: tcp
+      #   FromPort: 443
+      #   ToPort: 443
+      #   SourceSecurityGroupId: !Ref ALBSG
+      #   Description: allow inbound https access from Aoolication Load Balancer          
+      Tags:
+        - Key: Name
+          Value: publicSG  
+         
+      
+  privateSG: 
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open ssh (22) and node (3000)"
+      GroupName: privateSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref bastionSG
+          Description: allow inbound ssh access from bastionSG          
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref ALBinternalSG
+          Description: allow inbound nodejs access from ALBinternalSG                 
+      Tags:
+        - Key: Name
+          Value: privateSG  
+
+  dataSG: 
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open mysql (3306)"
+      GroupName: dataSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306 
+          SourceSecurityGroupId: !Ref bastionSG
+          Description: allow inbound mysql access from bastionSG          
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref privateSG
+          Description: allow inbound mysql access from privateSG          
+      Tags:
+        - Key: Name
+          Value: dataSG   
+
+
+Outputs:
+  VPC:
+    Description: VPC ID
+    Export:
+      Name: !Sub ${AWS::StackName}-VPC
+    Value: !Ref VPC
+
+  BastionSNA:
+    Description: BastionSNA ID
+    Export:
+      Name: !Sub ${AWS::StackName}-BastionSNA
+    Value: !Ref BastionSNA  
+
+  BastionSNB:
+    Description: BastionSNB ID
+    Export:
+      Name: !Sub ${AWS::StackName}-BastionSNB
+    Value: !Ref BastionSNB      
+    
+  PublicSNA:
+    Description: PublicSNA ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSNA
+    Value: !Ref PublicSNA 
+
+  PublicSNB:
+    Description: PublicSNB ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSNB
+    Value: !Ref PublicSNB  
+
+  PrivateSNA:
+    Description: PrivateSNA ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSNA
+    Value: !Ref PrivateSNA           
+
+  PrivateSNB:
+    Description: PrivateSNB ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSNB
+    Value: !Ref PrivateSNB
+
+  DataSNA:
+    Description: DataSNA ID
+    Export:
+      Name: !Sub ${AWS::StackName}-DataSNA
+    Value: !Ref DataSNA   
+
+  DataSNB:
+    Description: DataSNB ID
+    Export:
+      Name: !Sub ${AWS::StackName}-DataSNB
+    Value: !Ref DataSNB      
+
+  ALBSG:
+    Description: ALBSG ID 
+    Export: 
+      Name: !Sub ${AWS::StackName}-ALBSG
+    Value: !Ref ALBSG
+
+  ALBinternalSG:
+    Description: ALBinternalSG ID 
+    Export: 
+      Name: !Sub ${AWS::StackName}-ALBinternalSG
+    Value: !Ref ALBinternalSG    
+
+  bastionSG:
+    Description: bastionSG ID 
+    Export: 
+      Name: !Sub ${AWS::StackName}-bastionSG
+    Value: !Ref bastionSG
+
+  publicSG:
+    Description: publicSG ID 
+    Export: 
+      Name: !Sub ${AWS::StackName}-publicSG
+    Value: !Ref publicSG      
+
+  privateSG:
+    Description: privateSG ID 
+    Export: 
+      Name: !Sub ${AWS::StackName}-privateSG
+    Value: !Ref privateSG   
+
+  dataSG:
+    Description: dataSG ID 
+    Export: 
+      Name: !Sub ${AWS::StackName}-dataSG
+    Value: !Ref dataSG         
+    

@@ -1,0 +1,279 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Export VPC Stack Name"
+        Parameters:
+          - ExportVpcStackName
+
+      - 
+        Label:
+          default: "ECS Repository Image"  
+        Parameters:
+          - ImageURL    
+
+      -
+        Label:
+          default: "ECS Cluster" 
+        Parameters:
+          - MyServiceName
+          - AppContainerPort
+          - DesiredContainers
+
+Parameters:
+  ExportVpcStackName:
+    Description: The name of the vpc stack that exports values
+    Type: String
+
+  ImageURI:
+    Description: The URI of the image form the ECR repository
+    Type: String    
+
+  MyServiceName:
+    Description: The name of the Service created  
+    Type: String
+
+  AppContainerPort:
+    Type: Number
+    Description: Container port of app requiring ELB exposure
+    Default: '80' 
+
+  DesiredContainers:
+    Type: Number
+    Description: The number of containers you want to run 
+    Default: '1'
+
+
+
+ 
+Resources:
+
+  # ACMCertificate:
+  #   Type: AWS::CertificateManager::Certificate
+  #   Properties: 
+  #     DomainName: !Sub "api.${DomainName}"
+  #     DomainValidationOptions:
+  #       - DomainName: !Sub "api.${DomainName}"
+  #         ValidationDomain: !Sub "api.${DomainName}"
+  #     ValidationMethod: DNS
+
+  # Repository:
+  #   Type: AWS::ECR::Repository
+  #   Properties: 
+  #     RepositoryName: MyRepository
+
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
+  
+  AutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: 2
+      MaxCapacity: 2
+     # ResourceId: service/MyCluster/MyCluster-service
+      # ResourceId: !Join
+      #          - '/'
+      #          - - service
+      #            - !Ref Cluster
+      #            - !GetAtt Service.ServiceName
+      ResourceId: !Select
+        - "5"
+        - !Split
+          - ":"
+          - !Ref Service      
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  ScalingPolicyCPU:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: MyCluster-service-cpu
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 10
+        ScaleOutCooldown: 10
+        TargetValue: 45.0
+
+  ScalingPolicyMemory:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: MyCluster-service-memory
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization 
+        ScaleInCooldown: 10
+        ScaleOutCooldown: 10
+        TargetValue: 50.0
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: MyCluster
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: MyCluster-group
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: MyCluster-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      Policies:
+        - PolicyDocument:
+            Statement:
+              Action:
+                - ses:SendEmail
+              Effect: Allow
+              Resource: '*'
+          PolicyName: send-mail
+
+ 
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MyCluster-alb
+      Subnets:
+        - Fn::ImportValue: !Sub ${ExportVpcStackName}-PublicSNA
+        - Fn::ImportValue: !Sub ${ExportVpcStackName}-PublicSNB
+      SecurityGroups:
+        - Fn::ImportValue: !Sub ${ExportVpcStackName}-ALBSG
+
+ 
+  HTTPLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - LoadBalancer
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # ECSALBListenerRule:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   DependsOn: HTTPLoadBalancerListener
+  #   Properties:
+  #     Actions:
+  #       - Type: forward
+  #         TargetGroupArn: !Ref TargetGroup
+  #     Conditions:
+  #       - Field: path-pattern
+  #         Values:
+  #           - /health-check
+  #     ListenerArn: !Ref HTTPLoadBalancerListener
+  #     Priority: 1
+         
+      
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: 
+      - LoadBalancer
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckPort: !Ref AppContainerPort
+      HealthCheckIntervalSeconds: 20
+      HealthCheckPath: /health-check
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200      
+      TargetType: ip
+      Name: MyCluster-tg
+      Port: !Ref AppContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: stickiness.type
+          Value: lb_cookie 
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: 86400         
+      VpcId: 
+        Fn::ImportValue: !Sub ${ExportVpcStackName}-VPC 
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: MyCluster-task
+      Cpu: 256
+      Memory: 512
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !Ref ExecutionRole
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+        - Name: MyCluster-task-container
+          Image: !Ref ImageURI
+          PortMappings:
+            - ContainerPort: !Ref AppContainerPort
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+      RequiresCompatibilities:
+        - FARGATE
+
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: HTTPLoadBalancerListener
+    Properties:
+      ServiceName: !Ref MyServiceName
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredContainers
+      HealthCheckGracePeriodSeconds: 60
+      LaunchType: FARGATE
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroup
+          ContainerPort: !Ref AppContainerPort
+          ContainerName: MyCluster-task-container      
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: 
+            - Fn::ImportValue: !Sub ${ExportVpcStackName}-ContainerSecurityGroup                     
+          Subnets:
+            - Fn::ImportValue: !Sub ${ExportVpcStackName}-PublicSNA
+            - Fn::ImportValue: !Sub ${ExportVpcStackName}-PublicSNB
+          
