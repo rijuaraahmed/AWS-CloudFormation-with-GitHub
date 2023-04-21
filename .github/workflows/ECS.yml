@@ -32,7 +32,7 @@ jobs:
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >
             ExportVpcStackname: VPC,
-            ImageURI: 224029526699.dkr.ecr.us-east-1.amazonaws.com/myrepo:farval,
+            ImageURI: "224029526699.dkr.ecr.us-east-1.amazonaws.com/myrepo:farval",
             MyServiceName: farvalService,
             AppContainerPort: 3000,
             DesiredContainers: 2
