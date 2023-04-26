@@ -37,6 +37,7 @@ Parameters:
   MyServiceName:
     Description: The name of the Service created  
     Type: String
+    Default: 'testService'
 
   AppContainerPort:
     Type: Number
