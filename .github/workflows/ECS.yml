@@ -25,7 +25,7 @@ jobs:
 
       # Deploy to AWS CloudFormation
       - name: Deploy to AWS CloudFormation
-        uses: aws-actions/aws-cloudformation-github-deploy@v2
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
           name: ECS
           template: Infrastructure/ECSforGitHub.yaml
