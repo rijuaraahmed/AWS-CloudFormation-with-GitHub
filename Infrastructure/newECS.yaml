@@ -1,0 +1,781 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+# Metadata:
+#   AWS::CloudFormation::Interface:
+#     ParameterGroups:
+#       -
+#         Label:
+#           default: "Export VPC Stack Name"
+#         Parameters:
+#           - ExportVpcStackName
+
+#       - 
+#         Label:
+#           default: "ECS Repository Image"  
+#         Parameters:
+#           - ImageURL    
+
+#       -
+#         Label:
+#           default: "ECS Cluster" 
+#         Parameters:
+#           - MyServiceName
+#           - AppContainerPort
+#           - DesiredContainers
+
+Parameters:
+  ExportVpcStackName:
+    Description: The name of the vpc stack that exports values
+    Type: String
+
+  ImageURI:
+    Description: The URI of the image form the ECR repository
+    Type: String    
+    Default: '224029526699.dkr.ecr.us-east-1.amazonaws.com/myrepo:farval'
+
+  MyServiceName:
+    Description: The name of the Service created  
+    Type: String
+    Default: 'farvalService'
+
+  AppContainerPort:
+    Type: Number
+    Description: Container port of app requiring ELB exposure
+    Default: '3000' 
+
+  DesiredContainers:
+    Type: Number
+    Description: The number of containers you want to run 
+    Default: '2'
+  VpcCIDR:
+    Default: 10.100.0.0/16
+    Description: IP range for this VPC
+    Type: String
+
+  BastionSNACIDR:
+    Default: 10.100.1.0/24
+    Description: IP range for this Bastion Subnet in AZ A
+    Type: String 
+
+  BastionSNBCIDR:
+    Default: 10.100.2.0/24
+    Description: IP range for this Bastion Subnet in AZ B
+    Type: String  
+
+  PublicSNACIDR:
+    Default: 10.100.3.0/24
+    Description: IP range for this Public Subnet in AZ A
+    Type: String
+
+  PublicSNBCIDR:
+    Default: 10.100.4.0/24
+    Description: IP range for this Public Subnet in AZ B
+    Type: String
+
+  PrivateSNACIDR:
+    Default: 10.100.5.0/24
+    Description: IP range for this Private Subnet in AZ A
+    Type: String  
+
+  PrivateSNBCIDR:
+    Default: 10.100.6.0/24
+    Description: IP range for this Private Subnet in AZ B
+    Type: String 
+
+  DataSNACIDR:
+    Default: 10.100.7.0/24
+    Description: IP range for this Data Subnet in AZ A
+    Type: String  
+
+  DataSNBCIDR:
+    Default: 10.100.8.0/24
+    Description: IP range for this Data Subnet in AZ B
+    Type: String  
+
+  SSHLocation:
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 217.180.225.234/32
+    Description: The IP address range that can be used to access the Bastion server using SSH.
+    MaxLength: '18'
+    MinLength: '9'
+    Type: String  
+
+  MySQLLocation:
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 217.180.225.234/32
+    Description: The IP address range that can be used to access the Bastion server using MySql.
+    MaxLength: '18'
+    MinLength: '9'
+    Type: String     
+
+Resources:
+
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: testVPC
+
+
+  # Internet access:      
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+      - Key: Name
+        Value: TestIGW 
+
+
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref myInternetGateway
+
+
+  # 4 public Subnets and 4 private Subnets:
+  
+  # Bastion instance in public subnet AZ A
+  BastionSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref BastionSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]   
+      Tags:
+      - Key: Name
+        Value: BastionSNA
+
+  # Bastion instance in public subnet AZ B
+  BastionSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref BastionSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '' ] 
+      Tags:
+      - Key: Name
+        Value: BastionSNB 
+  
+  # Public subnet with nginx instance in AZ A
+  PublicSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '']  
+      Tags:
+      - Key: Name
+        Value: PublicSNA
+
+  # Public subnet with nginx instance in AZ B  
+  PublicSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs ''] 
+      Tags:
+      - Key: Name
+        Value: PublicSNB
+
+  #Private subnet with nodeJS instance in AZ A
+  PrivateSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: PrivateSNA
+
+  #Private subnet with nodeJS instance in AZ B   
+  PrivateSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: PrivateSNB
+  
+  #Private subnet with RDS instance in AZ A
+  DataSNA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DataSNACIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: DataSNA
+
+  #Private subnet with RDS read replica in AZ B
+  DataSNB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DataSNBCIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '' ] 
+      Tags:
+      - Key: Name
+        Value: DataSNB    
+
+
+  # A NAT Gateway for AZ A: 
+  NATGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NATGateway1EIP.AllocationId
+      PrivateIpAddress: 10.100.3.250
+      SubnetId: !Ref PublicSNA
+      Tags: 
+      - Key: Name
+        Value: NatGateway in PublicSNA
+
+  NATGateway1EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+      - Key: Name
+        Value: EIP1        
+
+  # A NAT Gateway for AZ B:
+
+  NATGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NATGateway2EIP.AllocationId
+      PrivateIpAddress: 10.100.4.250
+      SubnetId: !Ref PublicSNB
+      Tags: 
+      - Key: Name
+        Value: NatGateway in PublicSNB
+
+  NATGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+      - Key: Name
+        Value: EIP2 
+
+
+  # Private Route Table 1
+  PrivateRT1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRT in AZ A
+
+
+  PrivateRoute1:            # Private route table can access web via NAT (created below)
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRT1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway1 # Route traffic through the NAT Gateway in AZ A 
+ 
+
+  PrivateSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSNA
+      RouteTableId: !Ref PrivateRT1
+
+  DataSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DataSNA
+      RouteTableId: !Ref PrivateRT1       
+
+
+  # Private Route Table 2
+  PrivateRT2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRT in AZ B
+
+
+  PrivateRoute2:            # Private route table can access web via NAT (created below)
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRT2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway2 # Route traffic through the NAT Gateway in AZ B 
+
+
+  PrivateSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSNB
+      RouteTableId: !Ref PrivateRT2            
+
+  DataSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DataSNB
+      RouteTableId: !Ref PrivateRT2      
+
+
+
+        
+  # Some route tables for our subnets:
+ 
+  #Public Route Table
+  PublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PublicRT
+
+
+  PublicRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref myInternetGateway
+
+
+  #Bastion Route Table
+  BastionRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: BastionRT
+
+
+  BastionRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref BastionRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref myInternetGateway      
+       
+ 
+
+  # Attach the public subnets to public route tables, 
+  # and attach the private subnets to private route tables:    
+  PublicSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSNA
+      RouteTableId: !Ref PublicRT
+
+
+  PublicSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSNB
+      RouteTableId: !Ref PublicRT
+
+
+  BastionSNARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref BastionSNA
+      RouteTableId: !Ref BastionRT  
+
+
+  BastionSNBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref BastionSNB
+      RouteTableId: !Ref BastionRT   
+
+      
+
+  # Security Group Rules
+
+  ALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open http(s) (80/443)"
+      GroupName: ALBSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:          
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80 
+          CidrIp: 0.0.0.0/0
+          Description: allow inbound http access from anywhere          
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: allow inbound https access from anywhere          
+      Tags:
+        - Key: Name
+          Value: ALBSG
+
+
+  ALBinternalSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Access to the internal Load balancer"
+      GroupName: ALBinternalSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:          
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000 
+          SourceSecurityGroupId: !Ref publicSG
+          Description: allow inbound http access from instances with publicSG                
+      Tags:
+        - Key: Name
+          Value: ALBinternalSG    
+            
+
+
+  bastionSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open ssh (22) and mysql (3306)"
+      GroupName: bastionSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+          Description: allow inbound ssh access from myIP 
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306 
+          CidrIp: !Ref MySQLLocation
+          Description: allow inbound mysql access from myIP          
+      Tags:
+        - Key: Name
+          Value: bastionSG   
+
+  publicSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open ssh (22) and http(s) (80/443)"
+      GroupName: publicSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22 
+          SourceSecurityGroupId: !Ref bastionSG
+          Description: allow inbound ssh access from bastionSG          
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80 
+          SourceSecurityGroupId: !Ref ALBSG
+          Description: allow inbound http access from Aoolication Load Balancer          
+      # - IpProtocol: tcp
+      #   FromPort: 443
+      #   ToPort: 443
+      #   SourceSecurityGroupId: !Ref ALBSG
+      #   Description: allow inbound https access from Aoolication Load Balancer          
+      Tags:
+        - Key: Name
+          Value: publicSG  
+         
+      
+  privateSG: 
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open ssh (22) and node (3000)"
+      GroupName: privateSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref bastionSG
+          Description: allow inbound ssh access from bastionSG          
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref ALBinternalSG
+          Description: allow inbound nodejs access from ALBinternalSG                 
+      Tags:
+        - Key: Name
+          Value: privateSG  
+
+  dataSG: 
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Open mysql (3306)"
+      GroupName: dataSG
+      VpcId: !Ref VPC 
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306 
+          SourceSecurityGroupId: !Ref bastionSG
+          Description: allow inbound mysql access from bastionSG          
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref privateSG
+          Description: allow inbound mysql access from privateSG          
+      Tags:
+        - Key: Name
+          Value: dataSG   
+
+  ContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ContainerSecurityGroup
+      GroupDescription: Security group for container
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref ALBSG
+          Description: allow inbound tcp access from ALBSG 
+  # ACMCertificate:
+  #   Type: AWS::CertificateManager::Certificate
+  #   Properties: 
+  #     DomainName: !Sub "api.${DomainName}"
+  #     DomainValidationOptions:
+  #       - DomainName: !Sub "api.${DomainName}"
+  #         ValidationDomain: !Sub "api.${DomainName}"
+  #     ValidationMethod: DNS
+
+  # Repository:
+  #   Type: AWS::ECR::Repository
+  #   Properties: 
+  #     RepositoryName: MyRepository
+
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
+  
+  AutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: 2
+      MaxCapacity: 2
+     # ResourceId: service/MyCluster/MyCluster-service
+      # ResourceId: !Join
+      #          - '/'
+      #          - - service
+      #            - !Ref Cluster
+      #            - !GetAtt Service.ServiceName
+      ResourceId: !Select
+        - "5"
+        - !Split
+          - ":"
+          - !Ref Service      
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      RoleARN: !GetAtt AutoScalingRole.Arn
+
+  ScalingPolicyCPU:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: MyCluster-service-cpu
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 10
+        ScaleOutCooldown: 10
+        TargetValue: 45.0
+
+  ScalingPolicyMemory:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: MyCluster-service-memory
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization 
+        ScaleInCooldown: 10
+        ScaleOutCooldown: 10
+        TargetValue: 50.0
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: MyCluster
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: MyCluster-group
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: MyCluster-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      Policies:
+        - PolicyDocument:
+            Statement:
+              Action:
+                - ses:SendEmail
+              Effect: Allow
+              Resource: '*'
+          PolicyName: send-mail
+
+ 
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MyCluster-alb
+      Subnets:
+        - !Ref PublicSNA
+        - !Ref PublicSNB
+       
+      SecurityGroups:
+        - !Ref ALBSG
+       
+  HTTPLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - LoadBalancer
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # ECSALBListenerRule:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   DependsOn: HTTPLoadBalancerListener
+  #   Properties:
+  #     Actions:
+  #       - Type: forward
+  #         TargetGroupArn: !Ref TargetGroup
+  #     Conditions:
+  #       - Field: path-pattern
+  #         Values:
+  #           - /health-check
+  #     ListenerArn: !Ref HTTPLoadBalancerListener
+  #     Priority: 1
+         
+      
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: 
+      - LoadBalancer
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckPort: !Ref AppContainerPort
+      HealthCheckIntervalSeconds: 20
+      HealthCheckPath: /health-check
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200      
+      TargetType: ip
+      Name: MyCluster-tg
+      Port: !Ref AppContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: stickiness.type
+          Value: lb_cookie 
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: 86400         
+      VpcId: !Ref VPC 
+        
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: MyCluster-task
+      Cpu: 256
+      Memory: 512
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !Ref ExecutionRole
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+        - Name: MyCluster-task-container
+          Image: !Ref ImageURI
+          PortMappings:
+            - ContainerPort: !Ref AppContainerPort
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+      RequiresCompatibilities:
+        - FARGATE
+
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: HTTPLoadBalancerListener
+    Properties:
+      ServiceName: !Ref MyServiceName
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredContainers
+      HealthCheckGracePeriodSeconds: 60
+      LaunchType: FARGATE
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroup
+          ContainerPort: !Ref AppContainerPort
+          ContainerName: MyCluster-task-container      
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: 
+            - !Ref ContainerSecurityGroup 
+                                
+          Subnets:
+            - !Ref PublicSNA
+            - !Ref PublicSNB
+          
