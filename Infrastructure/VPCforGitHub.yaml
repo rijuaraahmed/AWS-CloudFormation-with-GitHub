@@ -401,8 +401,8 @@ Resources:
       VpcId: !Ref VPC 
       SecurityGroupIngress:          
         - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
+          FromPort: 3000
+          ToPort: 3000 
           SourceSecurityGroupId: !Ref publicSG
           Description: allow inbound http access from instances with publicSG                
       Tags:
@@ -501,6 +501,19 @@ Resources:
         - Key: Name
           Value: dataSG   
 
+  ContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ContainerSecurityGroup
+      GroupDescription: Security group for container
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref ALBSG
+          Description: allow inbound tcp access from ALBSG      
+
 
 Outputs:
   VPC:
@@ -592,4 +605,9 @@ Outputs:
     Export: 
       Name: !Sub ${AWS::StackName}-dataSG
     Value: !Ref dataSG         
-    
+  
+  ContainerSecurityGroup:
+    Description: Security group for Container 
+    Export:
+      Name: !Sub ${AWS::StackName}-ContainerSecurityGroup
+    Value: !Ref ContainerSecurityGroup   
