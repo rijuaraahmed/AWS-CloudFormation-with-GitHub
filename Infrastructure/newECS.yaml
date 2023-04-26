@@ -24,9 +24,9 @@ AWSTemplateFormatVersion: 2010-09-09
 #           - DesiredContainers
 
 Parameters:
-  ExportVpcStackName:
-    Description: The name of the vpc stack that exports values
-    Type: String
+  # ExportVpcStackName:
+  #   Description: The name of the vpc stack that exports values
+  #   Type: String
 
   ImageURI:
     Description: The URI of the image form the ECR repository
