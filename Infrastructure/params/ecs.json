@@ -1,0 +1,23 @@
+[
+    {
+      "ParameterKey": "ExportVpcStackName:",
+      "ParameterValue": "VPC"
+    },
+    {
+        "ParameterKey": "ImageURI",
+        "ParameterValue": "224029526699.dkr.ecr.us-east-1.amazonaws.com/myrepo:farval"    
+    },
+    {
+        "ParameterKey": "MyServiceName:",
+        "ParameterValue": "farvalService"
+    },
+    {
+      "ParameterKey": "AppContainerPort",
+      "ParameterValue": "3000"
+    },
+    {
+      "ParameterKey": "DesiredContainers:",
+      "ParameterValue": "2"
+    }
+    
+  ]
