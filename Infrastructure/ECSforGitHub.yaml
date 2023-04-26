@@ -32,22 +32,22 @@ Parameters:
   ImageURI:
     Description: The URI of the image form the ECR repository
     Type: String    
-    Default: 'nginx'
+    Default: '224029526699.dkr.ecr.us-east-1.amazonaws.com/myrepo:farval'
 
   MyServiceName:
     Description: The name of the Service created  
     Type: String
-    Default: 'testService'
+    Default: 'farvalService'
 
   AppContainerPort:
     Type: Number
     Description: Container port of app requiring ELB exposure
-    Default: '80' 
+    Default: '3000' 
 
   DesiredContainers:
     Type: Number
     Description: The number of containers you want to run 
-    Default: '1'
+    Default: '2'
 
 
 
