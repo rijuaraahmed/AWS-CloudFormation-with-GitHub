@@ -26,6 +26,6 @@
 
   {
     "ParameterKey": "health-check",
-    "ParameterValue": "/"
+    "ParameterValue": "/health-check"
   }
 ]
