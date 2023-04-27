@@ -46,7 +46,7 @@ Parameters:
     Description: The number of containers you want to run
     Default: "1"
 
-  health-check:
+  healthCheck:
     Type: String
     Description: The health check path-name
     Default: "/"
@@ -209,7 +209,7 @@ Resources:
       HealthCheckEnabled: true
       HealthCheckPort: !Ref AppContainerPort
       HealthCheckIntervalSeconds: 20
-      HealthCheckPath: !Ref health-check
+      HealthCheckPath: !Ref healthCheck
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 2
       Matcher:
