@@ -1,8 +1,0 @@
-[
-  "ExportVpcStackName=VPC", 
-  "ImageURI=224029526699.dkr.ecr.us-east-1.amazonaws.com/myrepo:farval",
-  "MyServiceName=farvalService",
-  "AppContainerPort=3000",
-  "DesiredContainers=2"
-
-]
