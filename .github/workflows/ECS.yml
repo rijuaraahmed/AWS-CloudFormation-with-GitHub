@@ -1,4 +1,4 @@
-name: "Deploy to AWS CloudFormation"
+name: "Deploy to AWS CloudFormation for ECS"
 
 on:
   # Allows you to run this workflow manually from the Actions tab
