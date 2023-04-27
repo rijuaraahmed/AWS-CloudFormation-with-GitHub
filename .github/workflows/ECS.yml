@@ -1,4 +1,4 @@
-name: 'Deploy to AWS CloudFormation'
+name: "Deploy to AWS CloudFormation"
 
 on:
   # Allows you to run this workflow manually from the Actions tab
@@ -31,6 +31,5 @@ jobs:
           template: Infrastructure/ECSforGitHub.yaml
           no-fail-on-empty-changeset: "1"
           capabilities: CAPABILITY_NAMED_IAM
+          parameters: Infrastructure/ecs.json
         # parameter-overrides: >-
-          
-            
