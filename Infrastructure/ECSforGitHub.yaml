@@ -3,21 +3,18 @@ AWSTemplateFormatVersion: 2010-09-09
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
-      -
-        Label:
+      - Label:
           default: "Export VPC Stack Name"
         Parameters:
           - ExportVpcStackName
 
-      - 
-        Label:
-          default: "ECS Repository Image"  
+      - Label:
+          default: "ECS Repository Image"
         Parameters:
-          - ImageURL    
+          - ImageURL
 
-      -
-        Label:
-          default: "ECS Cluster" 
+      - Label:
+          default: "ECS Cluster"
         Parameters:
           - MyServiceName
           - AppContainerPort
@@ -27,36 +24,37 @@ Parameters:
   ExportVpcStackName:
     Description: The name of the vpc stack that exports values
     Type: String
-    Default: 'VPC'
+    Default: "MyVPC"
 
   ImageURI:
     Description: The URI of the image form the ECR repository
-    Type: String    
-    Default: '224029526699.dkr.ecr.us-east-1.amazonaws.com/myrepo:farval'
+    Type: String
+    Default: "nginx:latest"
 
   MyServiceName:
-    Description: The name of the Service created  
+    Description: The name of the Service created
     Type: String
-    Default: 'farvalService'
+    Default: "MyService"
 
   AppContainerPort:
     Type: Number
     Description: Container port of app requiring ELB exposure
-    Default: '3000' 
+    Default: "80"
 
   DesiredContainers:
     Type: Number
-    Description: The number of containers you want to run 
-    Default: '2'
+    Description: The number of containers you want to run
+    Default: "1"
 
+  health-check:
+    Type: String
+    Description: The health check path-name
+    Default: "/"
 
-
- 
 Resources:
-
   # ACMCertificate:
   #   Type: AWS::CertificateManager::Certificate
-  #   Properties: 
+  #   Properties:
   #     DomainName: !Sub "api.${DomainName}"
   #     DomainValidationOptions:
   #       - DomainName: !Sub "api.${DomainName}"
@@ -65,7 +63,7 @@ Resources:
 
   # Repository:
   #   Type: AWS::ECR::Repository
-  #   Properties: 
+  #   Properties:
   #     RepositoryName: MyRepository
 
   AutoScalingRole:
@@ -76,16 +74,16 @@ Resources:
           - Effect: Allow
             Principal:
               Service: ecs-tasks.amazonaws.com
-            Action: 'sts:AssumeRole'
+            Action: "sts:AssumeRole"
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
-  
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole"
+
   AutoScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:
       MinCapacity: 2
       MaxCapacity: 2
-     # ResourceId: service/MyCluster/MyCluster-service
+      # ResourceId: service/MyCluster/MyCluster-service
       # ResourceId: !Join
       #          - '/'
       #          - - service
@@ -95,7 +93,7 @@ Resources:
         - "5"
         - !Split
           - ":"
-          - !Ref Service      
+          - !Ref Service
       ScalableDimension: ecs:service:DesiredCount
       ServiceNamespace: ecs
       RoleARN: !GetAtt AutoScalingRole.Arn
@@ -121,7 +119,7 @@ Resources:
       ScalingTargetId: !Ref AutoScalingTarget
       TargetTrackingScalingPolicyConfiguration:
         PredefinedMetricSpecification:
-          PredefinedMetricType: ECSServiceAverageMemoryUtilization 
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
         ScaleInCooldown: 10
         ScaleOutCooldown: 10
         TargetValue: 50.0
@@ -148,7 +146,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-  
+
   TaskRole:
     Type: AWS::IAM::Role
     Properties:
@@ -164,10 +162,9 @@ Resources:
               Action:
                 - ses:SendEmail
               Effect: Allow
-              Resource: '*'
+              Resource: "*"
           PolicyName: send-mail
 
- 
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -178,7 +175,6 @@ Resources:
       SecurityGroups:
         - Fn::ImportValue: !Sub ${ExportVpcStackName}-ALBSG
 
- 
   HTTPLoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     DependsOn:
@@ -204,21 +200,20 @@ Resources:
   #           - /health-check
   #     ListenerArn: !Ref HTTPLoadBalancerListener
   #     Priority: 1
-         
-      
+
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    DependsOn: 
+    DependsOn:
       - LoadBalancer
     Properties:
       HealthCheckEnabled: true
       HealthCheckPort: !Ref AppContainerPort
       HealthCheckIntervalSeconds: 20
-      HealthCheckPath: /health-check
+      HealthCheckPath: !Ref health-check
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 2
       Matcher:
-        HttpCode: 200      
+        HttpCode: 200
       TargetType: ip
       Name: MyCluster-tg
       Port: !Ref AppContainerPort
@@ -227,11 +222,11 @@ Resources:
         - Key: stickiness.enabled
           Value: true
         - Key: stickiness.type
-          Value: lb_cookie 
+          Value: lb_cookie
         - Key: stickiness.lb_cookie.duration_seconds
-          Value: 86400         
-      VpcId: 
-        Fn::ImportValue: !Sub ${ExportVpcStackName}-VPC 
+          Value: 86400
+      VpcId:
+        Fn::ImportValue: !Sub ${ExportVpcStackName}-VPC
 
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -256,7 +251,6 @@ Resources:
       RequiresCompatibilities:
         - FARGATE
 
-
   Service:
     Type: AWS::ECS::Service
     DependsOn: HTTPLoadBalancerListener
@@ -270,13 +264,12 @@ Resources:
       LoadBalancers:
         - TargetGroupArn: !Ref TargetGroup
           ContainerPort: !Ref AppContainerPort
-          ContainerName: MyCluster-task-container      
+          ContainerName: MyCluster-task-container
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
-          SecurityGroups: 
-            - Fn::ImportValue: !Sub ${ExportVpcStackName}-ContainerSecurityGroup                     
+          SecurityGroups:
+            - Fn::ImportValue: !Sub ${ExportVpcStackName}-ContainerSecurityGroup
           Subnets:
             - Fn::ImportValue: !Sub ${ExportVpcStackName}-PublicSNA
             - Fn::ImportValue: !Sub ${ExportVpcStackName}-PublicSNB
-          
