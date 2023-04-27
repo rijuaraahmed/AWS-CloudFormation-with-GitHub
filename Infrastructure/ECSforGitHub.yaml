@@ -24,7 +24,7 @@ Parameters:
   ExportVpcStackName:
     Description: The name of the vpc stack that exports values
     Type: String
-    Default: "MyVPC"
+    Default: "VPC"
 
   ImageURI:
     Description: The URI of the image form the ECR repository
