@@ -38,5 +38,6 @@ jobs:
         echo $ECR_REGISTRY
         echo $ECR_REPOSITORY
         echo $IMAGE_TAG
+        cd infra/code
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
