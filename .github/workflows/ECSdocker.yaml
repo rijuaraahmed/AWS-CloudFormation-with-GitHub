@@ -3,7 +3,7 @@ name: Build and push image to ECR and Deploy the Image in ECS
 on: workflow_dispatch
 
 jobs:
-  ECR:
+  ECR_image:
     name: Build Image
     runs-on: ubuntu-latest
 
@@ -35,33 +35,28 @@ jobs:
           cd infra/code
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+  ECS:    
+    name: deploy to ECS
+    runs-on: ubuntu-latest
+    needs: ECR_image
 
-    ECS: "Deploy to AWS CloudFormation for ECS"
+    steps:
+      - name: Checkout code from master branch
+        uses: actions/checkout@v2
 
-      # The type of runner that the job will run on
-      runs-on: ubuntu-latest
-      # Steps represent a sequence of tasks that will be executed as part of the job
-      needs: ECR
-      steps:
-        # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-        - name: Checkout code from master branch
-          uses: actions/checkout@v2
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.ACCESS_KEY_SECRET }}
+          aws-region: us-east-1
 
-        # Configure AWS Credential
-        - name: Configure AWS Credentials
-          uses: aws-actions/configure-aws-credentials@v2
-          with:
-            aws-access-key-id: ${{ secrets.ACCESS_KEY }}
-            aws-secret-access-key: ${{ secrets.ACCESS_KEY_SECRET }}
-            aws-region: us-east-1
-
-        # Deploy to AWS CloudFormation
-        - name: Deploy to AWS CloudFormation
-          uses: aws-actions/aws-cloudformation-github-deploy@v1
-          with:
-            name: ECS
-            template: infra/templates/ECSforGitHub.yaml
-            no-fail-on-empty-changeset: "1"
-            capabilities: CAPABILITY_NAMED_IAM
-            parameter-overrides: file://${{ github.workspace }}/infra/params/ecs.json
-          # parameter-overrides: >-
+      - name: Deploy to AWS CloudFormation
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ECS
+          template: infra/templates/ECSforGitHub.yaml
+          no-fail-on-empty-changeset: "1"
+          capabilities: CAPABILITY_NAMED_IAM
+          parameter-overrides: file://${{ github.workspace }}/infra/params/ecs.json
+                                                         
